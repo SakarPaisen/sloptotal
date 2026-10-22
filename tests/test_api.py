@@ -279,3 +279,48 @@ def test_health_does_not_show_the_database_path(client):
     r = client.get("/health")
     assert r.status_code == 200
     assert "database_path" not in r.json()["database"]
+
+
+def test_public_stats_endpoints_never_leak_submitted_content(client):
+    """/api/recent and /api/scan/stats are world-readable: aggregates only.
+
+    A distinctive canary text, URL and report id must not appear anywhere in
+    either response, so a future change cannot quietly republish what people
+    submitted or make reports enumerable again.
+    """
+    from app.database import log_scan_sync
+
+    canary_text = "canary-text-1234 private draft nobody else should read"
+    canary_url = "https://canary-url-1234.example/private-page"
+    report_id = uuid4().hex[:12]
+    asyncio.run(
+        create_report(
+            report_id=report_id,
+            text_hash="d" * 64,
+            source_type="text",
+            source="",
+            text_excerpt=canary_text,
+            word_count=8,
+            engines_total=23,
+        )
+    )
+    log_scan_sync(
+        scan_type="url",
+        text_excerpt=canary_text,
+        text_hash="e" * 64,
+        chars=len(canary_text),
+        score=50.0,
+        indicator="yellow",
+        confidence="low",
+        bert=0.5,
+        e5=0.5,
+        tmr=0.5,
+        fakespot=0.5,
+        source_url=canary_url,
+    )
+    for endpoint in ("/api/recent", "/api/scan/stats"):
+        r = client.get(endpoint)
+        assert r.status_code == 200
+        assert canary_text not in r.text
+        assert canary_url not in r.text
+        assert report_id not in r.text

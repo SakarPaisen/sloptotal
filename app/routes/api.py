@@ -643,9 +643,13 @@ async def api_report_feedback(report_id: str, req: FeedbackRequest):
     return {"status": "saved"}
 
 
-@router.get("/scan/stats", tags=["Reports"], summary="Scan statistics and recent scans")
+@router.get(
+    "/scan/stats",
+    tags=["Reports"],
+    summary="Scan statistics",
+)
 async def api_scan_stats():
-    """Return scan log statistics and recent scans for analysis."""
+    """Return aggregate scan log statistics; never the individual scans."""
     try:
         return await get_scan_stats()
     except Exception as e:
